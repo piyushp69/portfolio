@@ -1,11 +1,16 @@
+import { m } from 'motion/react'
 import Icon from './Icon'
+import { Reveal } from './Section'
 import { navLinks, profile } from '../data/portfolio'
 import { scrollToSection } from '../hooks/usePortfolio'
+import { usePress } from '../hooks/usePointerEffects'
 
 export default function Footer() {
+  const pressable = usePress()
+
   return (
     <footer className="footer">
-      <div className="container">
+      <Reveal className="container">
         <div className="footer__grid">
           <div className="footer__brand">
             <span className="nav__mark">PP</span>
@@ -29,16 +34,17 @@ export default function Footer() {
 
           <div className="hero__socials">
             {profile.socials.map((social) => (
-              <a
+              <m.a
                 key={social.label}
                 className="icon-link"
                 href={social.href}
                 target={social.icon === 'mail' ? undefined : '_blank'}
                 rel="noreferrer noopener"
                 aria-label={social.label}
+                {...pressable}
               >
                 <Icon name={social.icon} size={18} />
-              </a>
+              </m.a>
             ))}
           </div>
         </div>
@@ -49,7 +55,7 @@ export default function Footer() {
           </p>
           <p>{profile.location}</p>
         </div>
-      </div>
+      </Reveal>
     </footer>
   )
 }

@@ -1,10 +1,19 @@
 import { useMemo, useState } from 'react'
+import { AnimatePresence, m } from 'motion/react'
 import Icon from './Icon'
-import Section, { Reveal } from './Section'
+import Section, { Spotlight } from './Section'
+import PopBox from './effects/PopBox'
 import { skillGroups } from '../data/portfolio'
+import { exitFade, spring } from '../lib/motion'
+import { usePress } from '../hooks/usePointerEffects'
+
+// With every group showing, the grid is a bento (index.css): on three columns
+// this group spans two, so the five cards fill two full rows.
+const WIDE_GROUP = 'libraries'
 
 export default function Skills() {
   const [active, setActive] = useState('all')
+  const pressable = usePress()
 
   const visible = useMemo(
     () =>
@@ -19,59 +28,64 @@ export default function Skills() {
     []
   )
 
+  const tabs = [{ id: 'all', title: 'All' }, ...skillGroups]
+
   return (
     <Section
       id="skills"
-      eyebrow="Toolkit"
-      eyebrowIcon="code"
       title="Skills & technologies"
       subtitle={`${total} tools, languages and methods I use to take a problem from raw data to a shipped decision.`}
     >
-      <Reveal className="skills__tabs">
-        <button
-          type="button"
-          className={`tab ${active === 'all' ? 'is-active' : ''}`.trim()}
-          onClick={() => setActive('all')}
-          aria-pressed={active === 'all'}
-        >
-          All
-        </button>
-        {skillGroups.map((group) => (
-          <button
-            key={group.id}
+      <PopBox className="skills__tabs glass-subtle">
+        {tabs.map((tab) => (
+          <m.button
+            key={tab.id}
             type="button"
-            className={`tab ${active === group.id ? 'is-active' : ''}`.trim()}
-            onClick={() => setActive(group.id)}
-            aria-pressed={active === group.id}
+            className={`tab ${active === tab.id ? 'is-active' : ''}`.trim()}
+            onClick={() => setActive(tab.id)}
+            aria-pressed={active === tab.id}
+            {...pressable}
           >
-            {group.title}
-          </button>
+            {active === tab.id && (
+              <m.span className="tab__pill" layoutId="skills-tab" transition={spring} />
+            )}
+            {tab.title}
+          </m.button>
         ))}
-      </Reveal>
+      </PopBox>
 
-      <div className="skills__grid">
-        {visible.map((group, i) => (
-          <Reveal
-            key={group.id}
-            className="card skill-card"
-            delay={i * 80}
-          >
-            <span className="skill-card__icon">
-              <Icon name={group.icon} size={21} />
-            </span>
-            <div>
+      {/* Filtering: leaving cards fade and shrink out, the rest reflow on the
+          shared spring, and new ones pop in one after another. */}
+      <div className={`skills__grid ${active === 'all' ? 'skills__grid--bento' : ''}`.trim()}>
+        <AnimatePresence mode="popLayout">
+          {visible.map((group, i) => (
+            <PopBox
+              key={group.id}
+              className={`card glass skill-card ${
+                group.id === WIDE_GROUP ? 'skill-card--wide' : ''
+              }`.trim()}
+              index={i}
+              layout="position"
+              transition={{ layout: spring }}
+              exit={exitFade}
+              data-spotlight
+            >
+              <Spotlight />
+              <span className="skill-card__icon">
+                <Icon name={group.icon} size={20} />
+              </span>
               <h3 className="skill-card__title">{group.title}</h3>
               <p className="skill-card__blurb">{group.blurb}</p>
-            </div>
-            <ul className="skill-card__items">
-              {group.items.map((item) => (
-                <li key={item} className="skill-pill">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </Reveal>
-        ))}
+              <ul className="skill-card__items">
+                {group.items.map((item) => (
+                  <m.li key={item} className="chip glass-subtle" {...pressable}>
+                    {item}
+                  </m.li>
+                ))}
+              </ul>
+            </PopBox>
+          ))}
+        </AnimatePresence>
       </div>
     </Section>
   )

@@ -1,33 +1,33 @@
 import Icon from './Icon'
-import Section, { Reveal } from './Section'
+import Section, { Spotlight } from './Section'
+import PopBox from './effects/PopBox'
 import { achievements, certificates } from '../data/portfolio'
 
 export default function Credentials() {
   return (
     <Section
       id="credentials"
-      eyebrow="Credentials"
-      eyebrowIcon="award"
       title="Certificates & achievements"
       subtitle="Certifications I earned and competitions where the work held up against a clock."
-      tint
     >
       <div className="credentials__grid">
         <div>
-          <Reveal as="h3" className="cred-block__title">
+          <PopBox as="h3" className="cred-block__title">
             <span>
               <Icon name="certificate" size={18} />
             </span>
             Certificates
-          </Reveal>
+          </PopBox>
 
           <div className="cred-list">
             {certificates.map((cert, i) => (
-              <Reveal
+              <PopBox
                 key={cert.id}
-                className="card cred-item"
-                delay={i * 80}
+                className="card glass cred-item"
+                index={i}
+                data-spotlight
               >
+                <Spotlight />
                 <span className="cred-item__icon">
                   <Icon name="certificate" size={18} />
                 </span>
@@ -58,26 +58,28 @@ export default function Credentials() {
                   </p>
                 </div>
                 <span className="cred-item__date">{cert.date}</span>
-              </Reveal>
+              </PopBox>
             ))}
           </div>
         </div>
 
         <div>
-          <Reveal as="h3" className="cred-block__title">
+          <PopBox as="h3" className="cred-block__title">
             <span>
               <Icon name="award" size={18} />
             </span>
             Achievements
-          </Reveal>
+          </PopBox>
 
           <div className="cred-list">
             {achievements.map((item, i) => (
-              <Reveal
+              <PopBox
                 key={item.id}
-                className="card cred-item"
-                delay={i * 80}
+                className="card glass cred-item"
+                index={i}
+                data-spotlight
               >
+                <Spotlight />
                 <span className="cred-item__icon cred-item__icon--award">
                   <Icon name="award" size={18} />
                 </span>
@@ -86,7 +88,7 @@ export default function Credentials() {
                   <p className="cred-item__desc">{item.description}</p>
                 </div>
                 <span className="cred-item__date">{item.date}</span>
-              </Reveal>
+              </PopBox>
             ))}
           </div>
         </div>

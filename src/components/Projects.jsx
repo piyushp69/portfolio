@@ -1,26 +1,101 @@
-import { useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, m } from 'motion/react'
 import Icon from './Icon'
-import Section, { Reveal } from './Section'
-import { projects } from '../data/portfolio'
+import ProjectArt from './ProjectArt'
+import Section, { Glare, Spotlight } from './Section'
+import PopBox from './effects/PopBox'
+import PopText from './effects/PopText'
+import { projectStory, projects } from '../data/portfolio'
+import { lazyWithPreload } from '../lib/lazy'
+import { TILT, cardContent, exitFade, spring } from '../lib/motion'
+import { usePress, useTilt } from '../hooks/usePointerEffects'
 
-// Accent shades are dark enough for small text and white-on-accent buttons (WCAG AA).
-const accents = {
-  indigo: { '--accent-color': '#4f46e5', '--accent-soft': '#eef0ff' },
-  cyan: { '--accent-color': '#0e7490', '--accent-soft': '#e3f6fb' },
-  amber: { '--accent-color': '#b45309', '--accent-soft': '#fdf3e2' },
+// The case-study modal is its own chunk, fetched once the browser is idle,
+// so it's ready before anyone opens it.
+const [ProjectModal, preloadModal] = lazyWithPreload(() => import('./ProjectModal'))
+
+/** Problem, Approach and Result, each popping in word by word. */
+function Story({ project }) {
+  return (
+    <dl className="project__story">
+      {projectStory.map(({ key, label }) => (
+        <div className={`project__step project__step--${key}`} key={key}>
+          <dt>{label}</dt>
+          <dd>
+            <PopText as="span" text={project[key]} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
-function ProjectCard({ project, delay }) {
-  const [open, setOpen] = useState(false)
+// `ref` comes from AnimatePresence, which measures cards as they leave.
+function ProjectCard({ project, index, open, onOpen, ref }) {
+  const [headline] = project.metrics
+  const pressable = usePress()
+  const tilt = useTilt(TILT.card)
+
+  // Anywhere on the card opens the case study, except its own links.
+  const onClick = (event) => {
+    if (!event.target.closest('a')) onOpen(project)
+  }
 
   return (
-    <Reveal
-      className="card project"
-      delay={delay}
+    <PopBox
+      ref={ref}
+      // Tones per theme live in index.css (.project--terracotta); honey is
+      // the default.
+      className={`card project project--${project.accent}`}
+      index={index}
       as="article"
-      style={accents[project.accent] ?? accents.indigo}
+      layout="position"
+      transition={{ layout: spring }}
+      exit={exitFade}
+      onClick={onClick}
+      style={tilt.style}
+      {...tilt.handlers}
+      data-spotlight
     >
-      <div className="project__side">
+      {/* The card's background and border. It shares a layoutId with the
+          modal's surface, which morphs out of it; being empty, it can
+          change shape without stretching any text. The corner radius is
+          set here so Motion keeps it round while the size changes. */}
+      <m.span
+        className="project__surface glass"
+        layoutId={`project-surface-${project.id}`}
+        transition={{ layout: spring }}
+        style={{ borderRadius: 16 }}
+        aria-hidden="true"
+      />
+      <Spotlight />
+
+      <m.div
+        className="project__media"
+        variants={cardContent}
+        initial={false}
+        animate={open ? 'open' : 'closed'}
+      >
+        {/* Zooms slightly on hover (index.css). */}
+        <div className="project__cover">
+          {project.image ? (
+            <img src={project.image} alt="" loading="lazy" decoding="async" />
+          ) : (
+            <ProjectArt id={project.id} />
+          )}
+        </div>
+        <p className="project__metric-badge glass-subtle">
+          <b>{headline.value}</b>
+          <span>{headline.label}</span>
+        </p>
+      </m.div>
+
+      <m.div
+        className="project__body"
+        variants={cardContent}
+        initial={false}
+        animate={open ? 'open' : 'closed'}
+      >
         <div className="project__top">
           <span className="project__badge">
             <i />
@@ -34,75 +109,60 @@ function ProjectCard({ project, delay }) {
           <p className="project__subtitle">{project.subtitle}</p>
         </div>
 
-        <div className="project__metrics">
-          {project.metrics.map((metric) => (
-            <div className="project__metric" key={metric.label}>
-              <b>{metric.value}</b>
-              <span>{metric.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+        <Story project={project} />
 
-      <div className="project__main">
-        <p className="project__summary">{project.summary}</p>
+        <ul className="project__tags" aria-label="Tech stack">
+          {project.tags.map((tag) => (
+            <m.li className="chip chip--mono glass-subtle" key={tag} {...pressable}>
+              {tag}
+            </m.li>
+          ))}
+        </ul>
 
         <div className="project__actions">
           {project.demo && (
-            <a
+            <m.a
               className="btn btn--sm project__demo"
               href={project.demo}
               target="_blank"
               rel="noreferrer noopener"
               aria-label={`${project.title} live demo (opens in a new tab)`}
+              {...pressable}
             >
               Live demo
               <Icon name="external" size={14} />
-            </a>
+            </m.a>
           )}
 
           <button
             type="button"
             className="project__toggle"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            aria-controls={`${project.id}-details`}
+            onClick={() => onOpen(project)}
+            aria-haspopup="dialog"
           >
-            {open ? 'Hide the details' : 'What I actually built'}
-            <Icon name="chevronDown" size={16} />
+            What I actually built
+            <Icon name="arrowRight" size={16} className="btn__arrow" />
           </button>
         </div>
+      </m.div>
 
-        <div
-          id={`${project.id}-details`}
-          className={`project__collapse ${open ? 'is-open' : ''}`.trim()}
-        >
-          <div>
-            <ul className="project__points">
-              {project.highlights.map((point, i) => (
-                <li className="project__point" key={i}>
-                  <Icon name="check" size={14} />
-                  <span>{point}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <ul className="project__tags">
-          {project.tags.map((tag) => (
-            <li className="chip" key={tag}>
-              {tag}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </Reveal>
+      <Glare style={tilt.glare} />
+    </PopBox>
   )
 }
 
 export default function Projects() {
   const [filter, setFilter] = useState('All')
+  const [selected, setSelected] = useState(null)
+  const pressable = usePress()
+  const close = useCallback(() => setSelected(null), [])
+
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 1))
+    const cancel = window.cancelIdleCallback ?? clearTimeout
+    const handle = idle(preloadModal, { timeout: 4000 })
+    return () => cancel(handle)
+  }, [])
 
   const filters = useMemo(() => {
     const set = new Set()
@@ -121,21 +181,22 @@ export default function Projects() {
   return (
     <Section
       id="projects"
-      eyebrow="Selected work"
-      eyebrowIcon="bolt"
       title="Projects that shipped a decision"
       subtitle="Three end-to-end builds: credit-risk scoring, LLM-powered catalogue enrichment, and live market forecasting."
-      tint
     >
-      <Reveal className="projects__filters">
+      <PopBox className="projects__filters glass-subtle">
         {filters.map((name) => (
-          <button
+          <m.button
             key={name}
             type="button"
             className={`tab ${filter === name ? 'is-active' : ''}`.trim()}
             onClick={() => setFilter(name)}
             aria-pressed={filter === name}
+            {...pressable}
           >
+            {filter === name && (
+              <m.span className="tab__pill" layoutId="projects-tab" transition={spring} />
+            )}
             {name}
             {name !== 'All' && (
               <span>
@@ -143,19 +204,32 @@ export default function Projects() {
                 ({projects.filter((p) => p.categories.includes(name)).length})
               </span>
             )}
-          </button>
+          </m.button>
         ))}
-      </Reveal>
+      </PopBox>
 
-      {visible.length === 0 ? (
-        <p className="empty-state">No projects in this category yet.</p>
-      ) : (
-        <div className="projects__list">
+      {/* The filters come from the projects, so none is ever empty. */}
+      <div className="projects__list">
+        <AnimatePresence mode="popLayout">
           {visible.map((project, i) => (
-            <ProjectCard key={project.id} project={project} delay={i * 90} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              index={i}
+              open={selected?.id === project.id}
+              onOpen={setSelected}
+            />
           ))}
-        </div>
-      )}
+        </AnimatePresence>
+      </div>
+
+      <AnimatePresence>
+        {selected && (
+          <Suspense key={selected.id} fallback={null}>
+            <ProjectModal project={selected} onClose={close} />
+          </Suspense>
+        )}
+      </AnimatePresence>
     </Section>
   )
 }

@@ -1,12 +1,7 @@
 export const profile = {
   name: 'Piyush Priyanshu',
   role: 'Data Analyst',
-  roles: [
-    'Data Analyst',
-    'Machine Learning Engineer',
-    'Predictive Modelling Enthusiast',
-    'BI & Dashboard Builder',
-  ],
+  roles: ['Data Analyst', 'ML Engineer', 'Data Scientist', 'Dashboard Builder'],
   tagline:
     'I turn fragmented, messy data into predictive models and decision-ready dashboards — from 3GB+ financial record joins to RAG pipelines and live market forecasting.',
   location: 'Jalandhar, Punjab, India',
@@ -79,7 +74,6 @@ export const skillGroups = [
       'spaCy',
       'Seaborn',
       'FastAPI',
-      'Machine Learning',
     ],
   },
   {
@@ -95,6 +89,7 @@ export const skillGroups = [
     icon: 'chart',
     blurb: 'How I approach a modelling problem end to end.',
     items: [
+      'Machine Learning',
       'Feature Engineering',
       'Predictive Modeling',
       'Model Evaluation',
@@ -115,6 +110,30 @@ export const skillGroups = [
   },
 ]
 
+// The tool marquee under the hero.
+export const tools = [
+  'Python',
+  'SQL',
+  'PyTorch',
+  'Pandas',
+  'Scikit-Learn',
+  'XGBoost',
+  'Power BI',
+  'Docker',
+  'FastAPI',
+  'Git',
+]
+
+// The three parts of every project's story, in order.
+export const projectStory = [
+  { key: 'problem', label: 'Problem' },
+  { key: 'approach', label: 'Approach' },
+  { key: 'result', label: 'Result' },
+]
+
+// Each card reads Problem -> Approach -> Result, with the first metric as its
+// corner badge. Add `image: 'projects/<id>.webp'` (a file in public/) to show
+// a screenshot; without one the card draws an illustrated cover.
 export const projects = [
   {
     id: 'credscore',
@@ -125,8 +144,12 @@ export const projects = [
     demo: 'https://credscorelive.streamlit.app/',
     tags: ['XGBoost', 'LightGBM', 'Power BI', 'Python', 'Pandas'],
     categories: ['Machine Learning', 'Analytics'],
-    summary:
-      'A GPU-accelerated default-prediction system built on 3GB+ of fragmented financial records, wrapped in a SHAP-driven Power BI dashboard so risk teams can see why a score moved.',
+    problem:
+      'Predict loan defaults from 3GB+ of fragmented financial records spread across 5 datasets, and let risk teams see why a score moved.',
+    approach:
+      'Relational joins in Python and Pandas built the feature space; GPU-accelerated XGBoost and LightGBM models, with SMOTE for class imbalance, predict defaults; SHAP values explain each score inside a Power BI dashboard.',
+    result:
+      'Predictive recall up 22%, and risk reporting that accelerated decision-making by 40%.',
     highlights: [
       'Architected a predictive feature space using Python and Pandas, executing complex relational joins across 3GB+ (5 datasets) of fragmented financial records.',
       'Developed a GPU-accelerated credit risk model using XGBoost and LightGBM to predict defaults, utilizing SMOTE for class imbalance to boost predictive recall by 22%.',
@@ -137,7 +160,7 @@ export const projects = [
       { value: '40%', label: 'Faster decisions' },
       { value: '3GB+', label: 'Records joined' },
     ],
-    accent: 'indigo',
+    accent: 'honey',
   },
   {
     id: 'product-intelligence',
@@ -148,8 +171,12 @@ export const projects = [
     demo: 'https://catalog-intelligence-engine.streamlit.app/',
     tags: ['RAG', 'LLM', 'FastAPI', 'spaCy', 'SQL'],
     categories: ['AI / LLM', 'Data Engineering'],
-    summary:
-      'An eight-stage ETL pipeline that parses shorthand, normalises units and enriches product catalogues, with a confidence-gated LLM review loop guarding data quality.',
+    problem:
+      'Product catalogues written in shorthand, with inconsistent units and missing attributes, need enriching without letting data quality slip.',
+    approach:
+      'An 8-stage ETL pipeline with deterministic decoding parses shorthand and converts units; a FastAPI RAG system grounded in a custom spaCy knowledge graph enriches each row; an adversarial LLM judge gates results by confidence.',
+    result:
+      'Data quality score up from 51.2 to 78.3, a 97% fill rate with 100% taxonomy coverage, and 1,000 rows processed in 7 seconds.',
     highlights: [
       'Orchestrated an 8-stage automated Extract, Transform, Load (ETL) pipeline with deterministic decoding, executing shorthand parsing and unit conversion for 1,000 rows in 7 seconds.',
       'Deployed a FastAPI-based Retrieval-Augmented Generation (RAG) system grounded in a custom spaCy knowledge graph, enhancing enriched data quality scores from 51.2 to 78.3.',
@@ -160,7 +187,7 @@ export const projects = [
       { value: '97%', label: 'Data fill rate' },
       { value: '1k rows / 7s', label: 'ETL throughput' },
     ],
-    accent: 'cyan',
+    accent: 'terracotta',
   },
   {
     id: 'tradeflow',
@@ -171,8 +198,12 @@ export const projects = [
     demo: 'https://tradeflowai.streamlit.app/',
     tags: ['XGBoost', 'yfinance', 'Streamlit', 'Scikit-Learn'],
     categories: ['Machine Learning', 'Analytics'],
-    summary:
-      'A live market pipeline that streams prices with sub-800ms latency, engineers technical indicators and serves directional predictions through a Streamlit KPI dashboard.',
+    problem:
+      'Turn live market prices into directional predictions quickly enough to act on.',
+    approach:
+      'An automated yfinance pipeline streams real-time prices; engineered technical indicators feed an XGBoost time-series model trained with Scikit-Learn; a Streamlit app serves live tracking, predictions and KPIs.',
+    result:
+      '64% directional accuracy on data streamed with sub-800ms latency, in a dashboard processing 1,200+ data points per minute.',
     highlights: [
       'Constructed an automated yfinance API data pipeline to stream real-time market data with sub-800ms latency for live prediction workflows.',
       'Trained an XGBoost ML model for time-series predictive analytics using Scikit-Learn, engineering technical indicators to achieve 64% directional accuracy.',
@@ -183,7 +214,7 @@ export const projects = [
       { value: '<800ms', label: 'Stream latency' },
       { value: '1,200+/min', label: 'Data points' },
     ],
-    accent: 'amber',
+    accent: 'honey',
   },
 ]
 

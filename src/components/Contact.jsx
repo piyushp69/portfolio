@@ -1,8 +1,14 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { AnimatePresence, m } from 'motion/react'
 import Icon from './Icon'
-import Section, { Reveal } from './Section'
+import Section, { Spotlight } from './Section'
+import PopBox from './effects/PopBox'
+import CyclingPlaceholder from './effects/CyclingPlaceholder'
+import { measureTextarea, vanishText } from './effects/particles'
 import { profile } from '../data/portfolio'
-import { useCopy } from '../hooks/usePortfolio'
+import { VANISH, drawCheck, iconSwap, statusIn } from '../lib/motion'
+import { useCopy, usePrefersReducedMotion } from '../hooks/usePortfolio'
+import { usePress } from '../hooks/usePointerEffects'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -12,11 +18,38 @@ const initialValues = { name: '', email: '', subject: '', message: '' }
 // Without one, the form hands the message to the visitor's mail app instead.
 const FORM_ENDPOINT = import.meta.env.VITE_CONTACT_ENDPOINT
 
+// What the empty message box suggests, a new one every few seconds.
+const PROMPTS = [
+  'Hiring for a data role?',
+  'Want to collaborate on an ML project?',
+  'Just saying hi?',
+]
+
 const statusMessages = {
-  sent: 'Thanks, your message is on its way. I’ll reply soon.',
+  sent: 'Message sent ✓',
   mailto:
     'Your mail app should be open with the message ready. Hit send and I’ll reply shortly.',
   error: 'That didn’t go through. Please try again, or email me directly.',
+}
+
+/** The check icon, drawn stroke by stroke when it appears. */
+function DrawnCheck() {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <m.path d="m5 12.5 4.5 4.5L19 7.5" {...drawCheck} />
+    </svg>
+  )
 }
 
 function validate(values) {
@@ -43,6 +76,11 @@ export default function Contact() {
   const [errors, setErrors] = useState({})
   const [status, setStatus] = useState('idle') // idle | sending | sent | mailto | error
   const { copied, copy } = useCopy()
+  const pressable = usePress()
+  const reduced = usePrefersReducedMotion()
+  const [vanishing, setVanishing] = useState(false)
+  const particles = useRef(null)
+  const delivered = status === 'sent' || status === 'mailto'
 
   const update = (field) => (event) => {
     const { value } = event.target
@@ -55,6 +93,21 @@ export default function Contact() {
         return next
       })
     }
+  }
+
+  // Dissolves the typed message into particles; resolves once it's gone.
+  // The text is hidden while it happens (CSS), not removed, so a failed send
+  // can bring it straight back.
+  const vanishMessage = async () => {
+    const field = document.getElementById('field-message')
+    if (reduced || !field?.value.trim()) return
+    const run = vanishText(particles.current, {
+      ...measureTextarea(field, field.parentElement),
+      duration: VANISH.vanishMs,
+    })
+    setVanishing(true)
+    await run.done
+    setVanishing(false)
   }
 
   const handleSubmit = async (event) => {
@@ -74,13 +127,20 @@ export default function Contact() {
       message: values.message.trim(),
     }
 
+    // The message dissolves while it's handed off; the delivery itself is
+    // unchanged and starts straight away.
+    const vanished = vanishMessage()
+
     if (!FORM_ENDPOINT) {
       // Hands the message to the visitor's mail client, pre-filled and ready to
-      // send. The fields stay filled in case no mail app is set up.
+      // send. Name, email and subject stay filled; the message has gone to the
+      // mail app, so its box clears once it has dissolved.
       const body = `${message.message}\n\n—\n${message.name}\n${message.email}`
       window.location.href = `mailto:${profile.email}?subject=${encodeURIComponent(
         message.subject
       )}&body=${encodeURIComponent(body)}`
+      await vanished
+      setValues((prev) => ({ ...prev, message: '' }))
       setStatus('mailto')
       return
     }
@@ -93,13 +153,17 @@ export default function Contact() {
         body: JSON.stringify(message),
       })
       if (!response.ok) throw new Error(`Form endpoint responded ${response.status}`)
+      await vanished
       setStatus('sent')
       setValues(initialValues)
     } catch {
+      // The text reappears, so nothing typed is lost.
+      await vanished
       setStatus('error')
     }
   }
 
+  const social = (icon) => profile.socials.find((link) => link.icon === icon)
   const channels = [
     {
       label: 'Email',
@@ -117,15 +181,15 @@ export default function Contact() {
     },
     {
       label: 'LinkedIn',
-      value: 'in/piyush-priyanshu',
-      href: 'https://linkedin.com/in/piyush-priyanshu',
+      value: `in/${social('linkedin').handle}`,
+      href: social('linkedin').href,
       icon: 'linkedin',
       external: true,
     },
     {
       label: 'GitHub',
-      value: 'github.com/piyushp69',
-      href: 'https://github.com/piyushp69',
+      value: `github.com/${social('github').handle}`,
+      href: social('github').href,
       icon: 'github',
       external: true,
     },
@@ -139,15 +203,12 @@ export default function Contact() {
   return (
     <Section
       id="contact"
-      eyebrow="Contact"
-      eyebrowIcon="mail"
       title="Let's talk data"
       subtitle="Hiring, collaborating, or just want to compare notes on a modelling problem? My inbox is open."
-      tint
     >
       <div className="contact__grid">
-        <Reveal className="contact__cards">
-          {channels.map((channel) => {
+        <div className="contact__cards">
+          {channels.map((channel, i) => {
             const inner = (
               <>
                 <span className="contact-card__icon">
@@ -161,7 +222,13 @@ export default function Contact() {
             )
 
             return (
-              <div className="card contact-card" key={channel.label}>
+              <PopBox
+                className="card glass contact-card"
+                key={channel.label}
+                index={i}
+                data-spotlight
+              >
+                <Spotlight />
                 {channel.href ? (
                   <a
                     className="contact-card__link"
@@ -176,26 +243,27 @@ export default function Contact() {
                 )}
 
                 {channel.copyable && (
-                  <button
+                  <m.button
                     type="button"
                     className="contact-card__copy"
                     onClick={() => copy(channel.value, channel.label)}
                     aria-label={`Copy ${channel.label.toLowerCase()}`}
                     title={copied === channel.label ? 'Copied' : 'Copy'}
+                    {...pressable}
                   >
                     <Icon
                       name={copied === channel.label ? 'check' : 'copy'}
                       size={15}
                     />
-                  </button>
+                  </m.button>
                 )}
-              </div>
+              </PopBox>
             )
           })}
-        </Reveal>
+        </div>
 
-        <Reveal delay={120}>
-          <form className="card form" onSubmit={handleSubmit} noValidate>
+        <PopBox index={1}>
+          <form className="card glass form" onSubmit={handleSubmit} noValidate>
             <div className="form__row">
               <div className={`field ${errors.name ? 'field--error' : ''}`.trim()}>
                 <label htmlFor="field-name">Your name</label>
@@ -257,18 +325,27 @@ export default function Contact() {
               )}
             </div>
 
-            <div className={`field ${errors.message ? 'field--error' : ''}`.trim()}>
+            {/* The label stays raised here, so the rotating prompt has room. */}
+            <div
+              className={`field field--prompt ${errors.message ? 'field--error' : ''}`.trim()}
+            >
               <label htmlFor="field-message">Message</label>
               <textarea
                 id="field-message"
                 name="message"
                 rows={5}
-                placeholder="Tell me a little about the problem you're solving..."
+                className={vanishing ? 'is-vanishing' : undefined}
                 value={values.message}
                 onChange={update('message')}
                 aria-invalid={Boolean(errors.message)}
                 aria-describedby={errors.message ? 'field-message-error' : undefined}
               />
+              <CyclingPlaceholder
+                phrases={PROMPTS}
+                active={!values.message && !vanishing}
+                className="field__prompt"
+              />
+              <canvas ref={particles} className="vanish__canvas" aria-hidden="true" />
               {errors.message && (
                 <span className="field__error" id="field-message-error">
                   {errors.message}
@@ -276,27 +353,43 @@ export default function Contact() {
               )}
             </div>
 
-            {(status === 'sent' || status === 'mailto') && (
-              <p className="form__status" role="status">
-                <Icon name="check" size={16} />
-                {statusMessages[status]}
-              </p>
-            )}
+            <AnimatePresence initial={false}>
+              {delivered && (
+                <m.p key="sent" className="form__status" role="status" {...statusIn}>
+                  {status === 'mailto' && <Icon name="check" size={16} />}
+                  {statusMessages[status]}
+                </m.p>
+              )}
 
-            {status === 'error' && (
-              <p className="form__status form__status--error" role="alert">
-                {statusMessages.error}
-              </p>
-            )}
+              {status === 'error' && (
+                <m.p
+                  key="error"
+                  className="form__status form__status--error"
+                  role="alert"
+                  {...statusIn}
+                >
+                  {statusMessages.error}
+                </m.p>
+              )}
+            </AnimatePresence>
 
-            <button
+            <m.button
               type="submit"
-              className="btn btn--primary btn--block"
+              className={`btn btn--primary btn--block ${
+                status === 'sending' ? 'is-loading' : ''
+              } ${delivered ? 'is-done' : ''}`.trim()}
               disabled={status === 'sending'}
+              {...pressable}
             >
-              <Icon name="send" size={16} />
+              <span className="btn__icon">
+                <AnimatePresence mode="wait" initial={false}>
+                  <m.span key={delivered ? 'done' : 'send'} {...iconSwap}>
+                    {delivered ? <DrawnCheck /> : <Icon name="send" size={16} />}
+                  </m.span>
+                </AnimatePresence>
+              </span>
               {status === 'sending' ? 'Sending…' : 'Send message'}
-            </button>
+            </m.button>
 
             <p className="form__note">
               {FORM_ENDPOINT
@@ -307,7 +400,7 @@ export default function Contact() {
               </a>
             </p>
           </form>
-        </Reveal>
+        </PopBox>
       </div>
     </Section>
   )

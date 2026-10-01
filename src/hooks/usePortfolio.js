@@ -1,152 +1,61 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { FINE_POINTER } from '../lib/motion'
+import { scrollToTarget, setScrollLocked, startSmoothScroll } from '../lib/scroll'
+import { sectionsReady } from '../lib/sections'
+import { getTheme, subscribeTheme } from '../lib/theme'
 
 /**
- * Adds `.is-visible` to an element the first time it scrolls into view.
- * Falls back to visible immediately when IntersectionObserver is missing.
+ * Tracks which section is crossing a line 40% of the way down the viewport.
+ * Each section is watched by an IntersectionObserver whose root is shrunk to
+ * a thin band at that line, so there is no scroll listener at all.
  */
-export function useReveal(options = {}) {
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-
-    if (typeof IntersectionObserver === 'undefined') {
-      el.classList.add('is-visible')
-      return
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible')
-            observer.unobserve(entry.target)
-          }
-        })
-      },
-      { threshold: 0.12, rootMargin: '0px 0px -60px 0px', ...options }
-    )
-
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [options.threshold, options.rootMargin])
-
-  return ref
-}
-
-/** Tracks which section id is currently in the viewport. */
-export function useScrollSpy(ids, offset = 120) {
+export function useScrollSpy(ids) {
   const [activeId, setActiveId] = useState(ids[0])
 
   useEffect(() => {
-    const handler = () => {
-      const scrollY = window.scrollY
-      let current = ids[0]
-
+    const crossing = new Set()
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) =>
+          entry.isIntersecting ? crossing.add(entry.target.id) : crossing.delete(entry.target.id)
+        )
+        const current = ids.find((id) => crossing.has(id))
+        if (current) setActiveId(current)
+      },
+      { rootMargin: '-40% 0px -59% 0px' }
+    )
+    let live = true
+    sectionsReady.then(() => {
+      if (!live) return
       ids.forEach((id) => {
-        const el = document.getElementById(id)
-        if (el && el.offsetTop - offset <= scrollY) current = id
+        const section = document.getElementById(id)
+        if (section) observer.observe(section)
       })
-
-      // Pin the last section once the page is scrolled to the bottom.
-      if (window.innerHeight + scrollY >= document.body.scrollHeight - 12) {
-        current = ids[ids.length - 1]
-      }
-
-      setActiveId(current)
-    }
-
-    handler()
-    window.addEventListener('scroll', handler, { passive: true })
-    window.addEventListener('resize', handler)
+    })
     return () => {
-      window.removeEventListener('scroll', handler)
-      window.removeEventListener('resize', handler)
+      live = false
+      observer.disconnect()
     }
-  }, [ids, offset])
+  }, [ids])
 
   return activeId
 }
 
-/** Returns scroll progress through the document, 0 → 1. */
-export function useScrollProgress() {
-  const [progress, setProgress] = useState(0)
-
-  useEffect(() => {
-    const handler = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight
-      setProgress(max > 0 ? Math.min(window.scrollY / max, 1) : 0)
-    }
-
-    handler()
-    window.addEventListener('scroll', handler, { passive: true })
-    window.addEventListener('resize', handler)
-    return () => {
-      window.removeEventListener('scroll', handler)
-      window.removeEventListener('resize', handler)
-    }
-  }, [])
-
-  return progress
-}
-
-/** True once the page is scrolled past `threshold` pixels. */
-export function useScrolledPast(threshold = 40) {
+/** True once the element with this id has scrolled entirely above the viewport. */
+export function useScrolledPastElement(id) {
   const [past, setPast] = useState(false)
 
   useEffect(() => {
-    const handler = () => setPast(window.scrollY > threshold)
-    handler()
-    window.addEventListener('scroll', handler, { passive: true })
-    return () => window.removeEventListener('scroll', handler)
-  }, [threshold])
+    const element = document.getElementById(id)
+    if (!element) return
+    const observer = new IntersectionObserver(([entry]) =>
+      setPast(!entry.isIntersecting && entry.boundingClientRect.top < 0)
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [id])
 
   return past
-}
-
-/** Cycles through phrases with a typewriter effect. */
-export function useTypewriter(words, { typeSpeed = 85, deleteSpeed = 40, pause = 1800 } = {}) {
-  const [index, setIndex] = useState(0)
-  const [text, setText] = useState('')
-  const [deleting, setDeleting] = useState(false)
-
-  useEffect(() => {
-    const prefersReduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-
-    if (prefersReduced) {
-      setText(words[0])
-      return
-    }
-
-    const word = words[index % words.length]
-    let delay = deleting ? deleteSpeed : typeSpeed
-
-    if (!deleting && text === word) {
-      delay = pause
-    } else if (deleting && text === '') {
-      delay = 320
-    }
-
-    const timer = setTimeout(() => {
-      if (!deleting && text === word) {
-        setDeleting(true)
-      } else if (deleting && text === '') {
-        setDeleting(false)
-        setIndex((i) => (i + 1) % words.length)
-      } else {
-        setText(
-          deleting ? word.slice(0, text.length - 1) : word.slice(0, text.length + 1)
-        )
-      }
-    }, delay)
-
-    return () => clearTimeout(timer)
-  }, [text, deleting, index, words, typeSpeed, deleteSpeed, pause])
-
-  return text
 }
 
 /** Copies text to the clipboard and reports success for a moment. */
@@ -186,78 +95,23 @@ export function useCopy(timeout = 1800) {
 }
 
 /**
- * Scrolls to a section and records it in the URL. Leaves the offset and the
- * smoothness to CSS (`scroll-padding-top` and `scroll-behavior`), so the fixed
- * navbar is accounted for at every breakpoint and reduced motion is respected.
+ * Scrolls to a section and records it in the URL. The offset comes from CSS
+ * `scroll-padding-top`, so the fixed navbar is accounted for at every
+ * breakpoint; lib/scroll.js picks smooth or native scrolling.
  */
 export function scrollToSection(event, id) {
   event?.preventDefault()
   const target = document.getElementById(id)
-  if (!target) return
+  if (!target) {
+    // Clicked before the sections below the hero have mounted (App.jsx).
+    sectionsReady.then(() => document.getElementById(id) && scrollToSection(null, id))
+    return
+  }
 
-  if (id === 'home') window.scrollTo({ top: 0 })
-  else target.scrollIntoView()
+  scrollToTarget(id === 'home' ? 0 : target)
 
   const { pathname, search } = window.location
   window.history.replaceState(null, '', id === 'home' ? pathname + search : `#${id}`)
-}
-
-// Elements that get the bubble hover. Keep in sync with the "Bubble hover"
-// selector list in styles/index.css.
-export const BUBBLE_SELECTOR = [
-  '.btn',
-  '.tab',
-  '.nav__link',
-  '.icon-link',
-  '.skill-pill',
-  '.contact-card__copy',
-  '.card',
-  '.stat',
-  '.about__facts',
-  '.about__cta',
-].join(', ')
-
-/**
- * Direction-aware "bubble" hover: a circle grows from the point where the
- * pointer enters an element and shrinks back out through the point where it
- * leaves. Sets `--bubble-x/y/radius` plus `.is-bubbling`; CSS draws the rest.
- * Only runs for mouse-like pointers, so touch devices keep plain tap styles.
- */
-export function useBubbleHover(selector = BUBBLE_SELECTOR) {
-  useEffect(() => {
-    if (!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) return
-
-    const place = (el, event) => {
-      const r = el.getBoundingClientRect()
-      el.style.setProperty('--bubble-x', `${event.clientX - r.left}px`)
-      el.style.setProperty('--bubble-y', `${event.clientY - r.top}px`)
-      // The diagonal covers the whole element from any origin, so moving the
-      // origin to the exit point never exposes an unfilled corner.
-      el.style.setProperty('--bubble-radius', `${Math.ceil(Math.hypot(r.width, r.height))}px`)
-    }
-
-    // pointerover/out bubble up, so one listener covers every element. Each
-    // bubble ancestor the pointer actually crossed into (or out of) is updated.
-    const handle = (entering) => (event) => {
-      let el = event.target.closest?.(selector)
-      while (el) {
-        if (!el.contains(event.relatedTarget)) {
-          place(el, event)
-          el.classList.toggle('is-bubbling', entering)
-        }
-        el = el.parentElement?.closest(selector)
-      }
-    }
-
-    const onOver = handle(true)
-    const onOut = handle(false)
-    document.addEventListener('pointerover', onOver)
-    document.addEventListener('pointerout', onOut)
-    return () => {
-      document.removeEventListener('pointerover', onOver)
-      document.removeEventListener('pointerout', onOut)
-    }
-  }, [selector])
 }
 
 /** Locks body scroll while a modal or drawer is open. */
@@ -266,8 +120,60 @@ export function useBodyScrollLock(locked) {
     if (!locked) return
     const original = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    // Lenis scrolls the page itself, so the overflow lock alone doesn't stop it.
+    setScrollLocked(true)
     return () => {
       document.body.style.overflow = original
+      setScrollLocked(false)
     }
   }, [locked])
+}
+
+// One MediaQueryList per query, shared by every component that asks.
+const queries = new Map()
+function mediaQueryList(query) {
+  if (!queries.has(query)) queries.set(query, window.matchMedia(query))
+  return queries.get(query)
+}
+
+/** Live result of a CSS media query. */
+export function useMediaQuery(query) {
+  const subscribe = useCallback(
+    (onChange) => {
+      const list = mediaQueryList(query)
+      list.addEventListener('change', onChange)
+      return () => list.removeEventListener('change', onChange)
+    },
+    [query]
+  )
+  return useSyncExternalStore(subscribe, () => mediaQueryList(query).matches)
+}
+
+/** True for a mouse or trackpad: the devices cursor effects are built for. */
+export function useFinePointer() {
+  return useMediaQuery(FINE_POINTER)
+}
+
+/**
+ * The visitor's reduced-motion setting, live. Used instead of Motion's own
+ * hook, which doesn't follow changes mid-visit and logs a warning in dev.
+ */
+export function usePrefersReducedMotion() {
+  return useMediaQuery('(prefers-reduced-motion: reduce)')
+}
+
+/** Smooths wheel scrolling with Lenis. Touch and reduced motion stay native. */
+export function useSmoothScroll() {
+  const fine = useFinePointer()
+  const reduced = usePrefersReducedMotion()
+
+  useEffect(() => {
+    if (!fine || reduced) return
+    return startSmoothScroll()
+  }, [fine, reduced])
+}
+
+/** The current theme, 'light' or 'dark', live. */
+export function useTheme() {
+  return useSyncExternalStore(subscribeTheme, getTheme)
 }

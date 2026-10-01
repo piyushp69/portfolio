@@ -39,7 +39,7 @@ const paths = {
       <path d="m6 11.5 6-6 6 6" />
     </>
   ),
-  chevronDown: <path d="m6 9.5 6 6 6-6" />,
+  close: <path d="M6 6l12 12M18 6 6 18" />,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   copy: (
     <>
@@ -102,22 +102,6 @@ const paths = {
       <path d="M16 19.5v-3" />
     </>
   ),
-  graduation: (
-    <>
-      <path d="m12 4 9.5 4.5L12 13 2.5 8.5 12 4Z" />
-      <path d="M6.5 10.8V16c0 1.4 2.5 2.8 5.5 2.8s5.5-1.4 5.5-2.8v-5.2" />
-    </>
-  ),
-  briefcase: (
-    <>
-      <rect x="2.8" y="7.5" width="18.4" height="12" rx="2.5" />
-      <path d="M8.5 7.5V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v1.5" />
-      <path d="M2.8 12.5h18.4" />
-    </>
-  ),
-  sparkle: (
-    <path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5 10.1 12.8 4.5 10.9 10.1 9 12 3.5Z" />
-  ),
   bolt: <path d="M13.5 3 5 13.5h5.5L10 21l8.5-10.5H13l.5-7.5Z" />,
   target: (
     <>
@@ -126,16 +110,16 @@ const paths = {
       <circle cx="12" cy="12" r="1" />
     </>
   ),
-  dot: <circle cx="12" cy="12" r="4" />,
-  user: (
+  sun: (
     <>
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" />
     </>
   ),
+  moon: <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z" />,
 }
 
-const filled = new Set(['github', 'linkedin', 'send', 'bolt', 'sparkle', 'dot'])
+const filled = new Set(['github', 'linkedin', 'send', 'bolt'])
 
 export default function Icon({ name, size = 18, className = '', ...rest }) {
   const shape = paths[name]

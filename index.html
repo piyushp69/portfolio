@@ -4,7 +4,17 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f6f8fc" />
+    <meta name="theme-color" content="#faf8f5" />
+    <!-- Applies a saved dark theme before first paint, so a returning visitor
+         never sees a flash of the light one. Mirrors src/lib/theme.js. -->
+    <script>
+      try {
+        if (localStorage.getItem('theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark'
+          document.querySelector('meta[name="theme-color"]').content = '#0f0e0d'
+        }
+      } catch {}
+    </script>
     <meta
       name="description"
       content="Piyush Priyanshu - Data Analyst specialising in predictive modelling, machine learning pipelines and business intelligence dashboards."
@@ -26,11 +36,22 @@
       content="Data Analyst turning fragmented data into predictive models and decision-ready dashboards."
     />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Fonts are self-hosted (src/styles/fonts.css). Preloading the Latin
+         files starts them alongside the app bundle, so text is laid out once,
+         already in its final font. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      href="/src/assets/fonts/plus-jakarta-sans-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/src/assets/fonts/jetbrains-mono-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
 
     <title>Piyush Priyanshu | Data Analyst</title>

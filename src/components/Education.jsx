@@ -1,26 +1,19 @@
 import Icon from './Icon'
-import Section, { Reveal } from './Section'
+import Section from './Section'
+import PopText from './effects/PopText'
+import { Timeline, TimelineItem } from './Timeline'
 import { education } from '../data/portfolio'
 
 export default function Education() {
   return (
     <Section
       id="education"
-      eyebrow="Education"
-      eyebrowIcon="graduation"
       title="Academic background"
       subtitle="Where the fundamentals came from."
     >
-      <div className="timeline">
-        {education.map((item, i) => (
-          <Reveal
-            key={item.id}
-            className="card timeline__item"
-            delay={i * 110}
-            as="article"
-          >
-            <span className="timeline__dot" aria-hidden="true" />
-
+      <Timeline>
+        {education.map((item) => (
+          <TimelineItem key={item.id}>
             <div className="timeline__head">
               <h3 className="timeline__title">{item.school}</h3>
               <span className="timeline__date">{item.period}</span>
@@ -31,15 +24,15 @@ export default function Education() {
               {item.location}
             </p>
 
-            <p className="edu__degree">{item.degree}</p>
+            <PopText className="edu__degree" text={item.degree} />
 
-            <span className="edu__score">
+            <span className="edu__score glass-subtle">
               <Icon name="target" size={14} />
               {item.score}
             </span>
-          </Reveal>
+          </TimelineItem>
         ))}
-      </div>
+      </Timeline>
     </Section>
   )
 }

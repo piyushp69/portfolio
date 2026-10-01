@@ -1,12 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, extend, useFrame, useThree } from '@react-three/fiber'
-import { PerformanceMonitor, shaderMaterial } from '@react-three/drei'
-import { AdditiveBlending, Color, LinearSRGBColorSpace, MathUtils, NormalBlending } from 'three'
+import { useEffect, useRef } from 'react'
+import {
+  AdditiveBlending,
+  Color,
+  Group,
+  LinearSRGBColorSpace,
+  LineSegments,
+  MathUtils,
+  NormalBlending,
+  PerspectiveCamera,
+  Points,
+  Scene,
+  ShaderMaterial,
+  UniformsUtils,
+  WebGLRenderer,
+} from 'three'
 import { buildSphere } from './sphereGeometry'
 import { subscribePointer } from '../../lib/pointer'
 
-// Loaded on demand by DataSphere.jsx: this file, React Three Fiber and three
-// are one lazy chunk that only downloads when the About section is close.
+// Loaded on demand by DataSphere.jsx: this file and the parts of three.js it
+// uses are a lazy chunk, fetched once the page is idle or the About section
+// is near. The scene is plain three.js, so only what it draws gets bundled.
+
+/** A ShaderMaterial factory; each material gets its own copy of the uniforms. */
+function shader(uniforms, vertexShader, fragmentShader) {
+  const defaults = Object.fromEntries(Object.entries(uniforms).map(([key, value]) => [key, { value }]))
+  return (options) =>
+    new ShaderMaterial({ uniforms: UniformsUtils.clone(defaults), vertexShader, fragmentShader, ...options })
+}
 
 // Shared by points and links: each vertex moves out along its own radius by
 // uScatter (driven by scroll speed), weighted by its seed, then fades with
@@ -23,7 +43,7 @@ const DISPLACE = /* glsl */ `
   }
 `
 
-const DotsMaterial = shaderMaterial(
+const DotsMaterial = shader(
   {
     uScatter: 0,
     uSize: 3.4,
@@ -59,10 +79,7 @@ const DotsMaterial = shaderMaterial(
   `
 )
 
-// The highlight nodes: bigger points with a bright core and a wide halo.
-// Each one pulses (size and brightness ±uPulse) on its own phase and speed,
-// so they never blink in step.
-const HighlightsMaterial = shaderMaterial(
+const HighlightsMaterial = shader(
   {
     uScatter: 0,
     uTime: 0,
@@ -118,9 +135,7 @@ const HighlightsMaterial = shaderMaterial(
   `
 )
 
-// Links take their end's tone: plain links stay as they were, and a link
-// touching a highlight starts in its colour and fades to plain.
-const LinksMaterial = shaderMaterial(
+const LinksMaterial = shader(
   {
     uScatter: 0,
     uColor: new Color('#e3b26b'),
@@ -153,8 +168,6 @@ const LinksMaterial = shaderMaterial(
     }
   `
 )
-
-extend({ DotsMaterial, HighlightsMaterial, LinksMaterial })
 
 // The shaders write colour straight to the screen, so the highlight colours
 // skip three's sRGB-to-linear conversion and show as their exact hex.
@@ -200,111 +213,234 @@ const MAX_TILT = MathUtils.degToRad(15)
 const SPIN = 0.07 // rad/s
 const PULSE = 0.2 // highlight size and brightness swing, ±20%
 
-function Sphere({ count, theme, interactive, still, scatter }) {
-  const tilt = useRef(null)
-  const spin = useRef(null)
-  const dots = useRef(null)
-  const glow = useRef(null)
-  const links = useRef(null)
-  const pointer = useRef({ x: 0, y: 0 })
-  const dpr = useThree((state) => state.viewport.dpr)
-  const { points, highlights, lines } = useMemo(() => buildSphere(count), [count])
-  const palette = PALETTE[theme]
+// The drawing buffer's pixel ratio: the screen's, capped at 1.5, and 1 once
+// the frame rate sags (sampled every 250ms; 3 of 4 samples in 10 decide).
+const DPR_CAP = 1.5
+const SAMPLE_MS = 250
+const SAMPLES = 10
 
-  useEffect(
-    () => () => {
-      points.dispose()
-      highlights.dispose()
-      lines.dispose()
-    },
-    [points, highlights, lines]
-  )
+/**
+ * Builds the sphere's renderer, camera and three layers (dots, links,
+ * highlight nodes) in `host`, and returns the handles the component uses to
+ * update it. Null when WebGL isn't available; the space then stays empty.
+ */
+function createSphere(host, { onFirstFrame, readScatter }) {
+  const canvas = document.createElement('canvas')
+  canvas.style.display = 'block'
 
-  // Mouse parallax: where the pointer is across the window, -1..1, read
-  // from the page's shared pointer listener.
-  useEffect(() => {
-    if (!interactive) return
-    const unsubscribe = subscribePointer(({ moved, x, y }) => {
-      if (!moved) return
-      pointer.current.x = (x / window.innerWidth) * 2 - 1
-      pointer.current.y = (y / window.innerHeight) * 2 - 1
-    })
-    return () => {
-      unsubscribe()
-      pointer.current = { x: 0, y: 0 }
+  let renderer
+  try {
+    renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' })
+  } catch {
+    return null
+  }
+  host.append(canvas)
+
+  const camera = new PerspectiveCamera(42, 1, 0.1, 1000)
+  camera.position.set(0, 0, 4.6)
+  const scene = new Scene()
+  const tilt = new Group()
+  const spin = new Group()
+  // A slight starting angle, so the static frame isn't pole-on.
+  spin.rotation.set(0.35, 0.6, 0)
+  tilt.add(spin)
+  scene.add(tilt)
+
+  const options = { transparent: true, depthWrite: false }
+  const dotsMaterial = DotsMaterial(options)
+  const linksMaterial = LinksMaterial(options)
+  const glowMaterial = HighlightsMaterial(options)
+  const dots = new Points(undefined, dotsMaterial)
+  const lines = new LineSegments(undefined, linksMaterial)
+  const glow = new Points(undefined, glowMaterial)
+  // Drawn last, so the highlights sit over the dots and links.
+  glow.renderOrder = 1
+  spin.add(dots, lines, glow)
+  const materials = [dotsMaterial, linksMaterial, glowMaterial]
+
+  const pointer = { x: 0, y: 0 }
+  let still = false
+  let frame = 0
+  let pending = 0
+  let last = 0
+  let first = true
+  let maxDpr = DPR_CAP
+  let unsubscribe = null
+
+  const render = () => {
+    renderer.render(scene, camera)
+    if (first) {
+      first = false
+      onFirstFrame()
     }
-  }, [interactive])
+  }
 
-  useFrame((_, delta) => {
+  // One frame of motion: the spin, the eased tilt toward the pointer, the
+  // scroll scatter and the highlights' pulse clock.
+  const step = (dt) => {
     if (still) return
-    const dt = Math.min(delta, 0.05)
-    spin.current.rotation.y += dt * SPIN
+    spin.rotation.y += dt * SPIN
     // Ease toward the pointer's tilt at the same rate at any frame rate.
     const ease = 1 - Math.pow(0.02, dt)
-    tilt.current.rotation.x = MathUtils.lerp(tilt.current.rotation.x, pointer.current.y * MAX_TILT, ease)
-    tilt.current.rotation.y = MathUtils.lerp(tilt.current.rotation.y, pointer.current.x * MAX_TILT, ease)
-    const amount = scatter?.get() ?? 0
-    dots.current.uScatter = amount
-    glow.current.uScatter = amount
-    links.current.uScatter = amount
-    glow.current.uTime += dt
-  })
+    tilt.rotation.x = MathUtils.lerp(tilt.rotation.x, pointer.y * MAX_TILT, ease)
+    tilt.rotation.y = MathUtils.lerp(tilt.rotation.y, pointer.x * MAX_TILT, ease)
+    const amount = readScatter()
+    for (const material of materials) material.uniforms.uScatter.value = amount
+    glowMaterial.uniforms.uTime.value += dt
+  }
 
-  return (
-    <group ref={tilt}>
-      {/* A slight starting angle, so the static frame isn't pole-on. */}
-      <group ref={spin} rotation={[0.35, 0.6, 0]}>
-        <points geometry={points}>
-          <dotsMaterial
-            ref={dots}
-            transparent
-            depthWrite={false}
-            blending={palette.blending}
-            uPixelRatio={dpr}
-            uSize={palette.size}
-            uOpacity={palette.dots}
-            uColorA={palette.a}
-            uColorB={palette.b}
-          />
-        </points>
-        <lineSegments geometry={lines}>
-          <linksMaterial
-            ref={links}
-            transparent
-            depthWrite={false}
-            blending={palette.blending}
-            uColor={palette.line}
-            uOpacity={palette.links}
-            uColorA={palette.green}
-            uColorB={palette.cyan}
-          />
-        </lineSegments>
-        {/* Drawn last, so the highlights sit over the dots and links. */}
-        <points geometry={highlights} renderOrder={1}>
-          <highlightsMaterial
-            ref={glow}
-            transparent
-            depthWrite={false}
-            blending={palette.blending}
-            uPixelRatio={dpr}
-            uSize={palette.size}
-            uPulse={still ? 0 : PULSE}
-            uCore={palette.core}
-            uHalo={palette.halo}
-            uHot={palette.hot}
-            uColorA={palette.green}
-            uColorB={palette.cyan}
-          />
-        </points>
-      </group>
-    </group>
-  )
+  const applyDpr = () => {
+    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), maxDpr)
+    renderer.setPixelRatio(dpr)
+    dotsMaterial.uniforms.uPixelRatio.value = dpr
+    glowMaterial.uniforms.uPixelRatio.value = dpr
+  }
+
+  let sampleStart = 0
+  let sampleFrames = 0
+  let samples = []
+  const track = (now) => {
+    if (!sampleStart) {
+      sampleStart = now
+      return
+    }
+    sampleFrames++
+    if (now - sampleStart < SAMPLE_MS) return
+    samples.push((sampleFrames * 1000) / (now - sampleStart))
+    sampleStart = now
+    sampleFrames = 0
+    if (samples.length < SAMPLES) return
+    const upper = Math.max(...samples) > 90 ? 90 : 60
+    const share = (test) => samples.filter(test).length / samples.length
+    const slow = share((fps) => fps < 50) >= 0.75
+    const fast = share((fps) => fps >= upper) >= 0.75
+    samples = []
+    const next = slow ? 1 : fast ? DPR_CAP : maxDpr
+    if (next === maxDpr) return
+    maxDpr = next
+    applyDpr()
+  }
+
+  const loop = (now) => {
+    frame = requestAnimationFrame(loop)
+    step(last ? Math.min((now - last) / 1000, 0.05) : 0)
+    last = now
+    render()
+    track(now)
+  }
+
+  // Off screen (or with reduced motion) it draws only when something changes.
+  const invalidate = () => {
+    if (frame || pending) return
+    pending = requestAnimationFrame(() => {
+      pending = 0
+      render()
+    })
+  }
+
+  // Sized from layout, not the on-screen box: the card around it scales as
+  // it pops in, and that mustn't shrink the drawing buffer. Whole CSS pixels,
+  // so the canvas is never stretched across a fractional width.
+  const resize = () => {
+    const width = host.offsetWidth
+    const height = host.offsetHeight
+    if (!width || !height) return
+    renderer.setSize(width, height)
+    camera.aspect = width / height
+    camera.updateProjectionMatrix()
+    invalidate()
+  }
+  const observer = new ResizeObserver(resize)
+  observer.observe(host)
+  applyDpr()
+  resize()
+
+  return {
+    setCount(count) {
+      const geometry = buildSphere(count)
+      for (const [object, next] of [
+        [dots, geometry.points],
+        [glow, geometry.highlights],
+        [lines, geometry.lines],
+      ]) {
+        object.geometry.dispose()
+        object.geometry = next
+      }
+      invalidate()
+    },
+    setTheme(theme) {
+      const palette = PALETTE[theme]
+      for (const material of materials) material.blending = palette.blending
+      const dotsU = dotsMaterial.uniforms
+      const linksU = linksMaterial.uniforms
+      const glowU = glowMaterial.uniforms
+      dotsU.uSize.value = palette.size
+      dotsU.uOpacity.value = palette.dots
+      dotsU.uColorA.value.set(palette.a)
+      dotsU.uColorB.value.set(palette.b)
+      linksU.uColor.value.set(palette.line)
+      linksU.uOpacity.value = palette.links
+      linksU.uColorA.value.copy(palette.green)
+      linksU.uColorB.value.copy(palette.cyan)
+      glowU.uSize.value = palette.size
+      glowU.uCore.value = palette.core
+      glowU.uHalo.value = palette.halo
+      glowU.uHot.value = palette.hot
+      glowU.uColorA.value.copy(palette.green)
+      glowU.uColorB.value.copy(palette.cyan)
+      invalidate()
+    },
+    setStill(value) {
+      still = value
+      glowMaterial.uniforms.uPulse.value = still ? 0 : PULSE
+      invalidate()
+    },
+    // On screen with motion allowed, it draws every frame.
+    setActive(active) {
+      if (active && !frame) {
+        last = 0
+        sampleStart = 0
+        sampleFrames = 0
+        samples = []
+        frame = requestAnimationFrame(loop)
+      } else if (!active && frame) {
+        cancelAnimationFrame(frame)
+        frame = 0
+      }
+    },
+    // Mouse parallax: where the pointer is across the window, -1..1, read
+    // from the page's shared pointer listener.
+    setInteractive(interactive) {
+      unsubscribe?.()
+      unsubscribe = null
+      pointer.x = 0
+      pointer.y = 0
+      if (!interactive) return
+      unsubscribe = subscribePointer(({ moved, x, y }) => {
+        if (!moved) return
+        pointer.x = (x / window.innerWidth) * 2 - 1
+        pointer.y = (y / window.innerHeight) * 2 - 1
+      })
+    },
+    dispose() {
+      cancelAnimationFrame(frame)
+      cancelAnimationFrame(pending)
+      observer.disconnect()
+      unsubscribe?.()
+      for (const object of [dots, lines, glow]) object.geometry.dispose()
+      for (const material of materials) material.dispose()
+      renderer.dispose()
+      renderer.forceContextLoss()
+      canvas.remove()
+    },
+  }
 }
 
 /**
  * The data sphere's canvas. `active` runs the render loop (on screen, motion
- * allowed); otherwise it renders on demand, which for reduced motion means a
- * single still frame.
+ * allowed); otherwise it draws only when something changes, which for
+ * reduced motion means a single still frame. `onReady` fires once the first
+ * frame is on the canvas.
  */
 export default function DataSphereScene({
   count,
@@ -315,31 +451,38 @@ export default function DataSphereScene({
   scatter,
   onReady,
 }) {
-  const [maxDpr, setMaxDpr] = useState(1.5)
+  const host = useRef(null)
+  const sphere = useRef(null)
+  const latest = useRef({ scatter, onReady })
+
+  useEffect(() => {
+    latest.current = { scatter, onReady }
+  })
+
+  useEffect(() => {
+    const handle = createSphere(host.current, {
+      onFirstFrame: () => latest.current.onReady?.(),
+      readScatter: () => latest.current.scatter?.get() ?? 0,
+    })
+    sphere.current = handle
+    return () => {
+      handle?.dispose()
+      sphere.current = null
+    }
+  }, [])
+
+  useEffect(() => sphere.current?.setCount(count), [count])
+  useEffect(() => sphere.current?.setTheme(theme), [theme])
+  useEffect(() => sphere.current?.setStill(still), [still])
+  useEffect(() => sphere.current?.setInteractive(interactive), [interactive])
+  useEffect(() => sphere.current?.setActive(active), [active])
 
   return (
-    <Canvas
+    <div
+      ref={host}
       className="sphere__canvas"
       // Decorative: the page's pointer handling stays with the page.
-      style={{ pointerEvents: 'none' }}
-      // Size from layout, not the on-screen box: the card around it scales
-      // as it pops in, and that mustn't shrink the drawing buffer.
-      resize={{ offsetSize: true }}
-      dpr={[1, maxDpr]}
-      frameloop={active ? 'always' : 'demand'}
-      camera={{ position: [0, 0, 4.6], fov: 42 }}
-      gl={{ antialias: true, alpha: true, powerPreference: 'low-power' }}
-      onCreated={onReady}
-    >
-      {/* Drops to 1x pixels if the frame rate sags. */}
-      <PerformanceMonitor onDecline={() => setMaxDpr(1)} onIncline={() => setMaxDpr(1.5)} />
-      <Sphere
-        count={count}
-        theme={theme}
-        interactive={interactive}
-        still={still}
-        scatter={scatter}
-      />
-    </Canvas>
+      style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', pointerEvents: 'none' }}
+    />
   )
 }

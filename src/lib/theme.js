@@ -1,6 +1,7 @@
 // Light / dark theme. The theme lives on <html data-theme>; the inline script
-// in index.html applies the saved choice before first paint, using the same
-// storage key and colours as below. Light is the default.
+// in index.html sets it before first paint, using the same storage key and
+// colours as below. Dark is the default: a first visit always opens dark,
+// whatever the OS prefers, and a choice made with the toggle is remembered.
 
 const STORAGE_KEY = 'theme'
 
@@ -8,7 +9,7 @@ const STORAGE_KEY = 'theme'
 const THEME_COLOR = { light: '#faf8f5', dark: '#0f0e0d' }
 
 export function getTheme() {
-  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
 }
 
 export function setTheme(theme) {

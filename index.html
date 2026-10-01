@@ -2,19 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#faf8f5" />
-    <!-- Applies a saved dark theme before first paint, so a returning visitor
-         never sees a flash of the light one. Mirrors src/lib/theme.js. -->
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0F0E0D" />
+    <!-- Sets the theme before any CSS or JS loads, so the page never flashes
+         the wrong one: dark, unless the visitor chose light with the toggle.
+         Mirrors src/lib/theme.js (same storage key and colours). -->
     <script>
-      try {
-        if (localStorage.getItem('theme') === 'dark') {
-          document.documentElement.dataset.theme = 'dark'
-          document.querySelector('meta[name="theme-color"]').content = '#0f0e0d'
-        }
-      } catch {}
+      ;(function () {
+        var theme = 'dark'
+        try {
+          if (localStorage.getItem('theme') === 'light') theme = 'light'
+        } catch (e) {}
+        document.documentElement.dataset.theme = theme
+        if (theme === 'light') document.querySelector('meta[name="theme-color"]').content = '#faf8f5'
+      })()
     </script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta
       name="description"
       content="Piyush Priyanshu - Data Analyst specialising in predictive modelling, machine learning pipelines and business intelligence dashboards."

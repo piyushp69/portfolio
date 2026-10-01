@@ -115,9 +115,9 @@
 
 /* ==========================================================================
    Dark theme
-   Chosen with the navbar toggle (ThemeToggle.jsx) and applied before first
-   paint by the script in index.html. Screen only, so printing always uses
-   the light theme.
+   The default, set before first paint by the script in index.html; the
+   navbar toggle (ThemeToggle.jsx) switches to light and back. Screen only,
+   so printing always uses the light theme.
    ========================================================================== */
 @media screen {
   :root[data-theme='dark'] {
@@ -220,6 +220,15 @@ html {
   scrollbar-gutter: stable; /* locking scroll (modal, drawer) keeps the width */
   scroll-behavior: smooth;
   scroll-padding-top: calc(var(--nav-h) + 16px);
+}
+
+/* The canvas behind the page is dark (the default theme) unless the light
+   theme is on, so nothing shows white around or before the content. On
+   screen only: printing stays light. */
+@media screen {
+  html:not([data-theme='light']) {
+    background-color: #0f0e0d;
+  }
 }
 
 /* Lenis moves the scroll position itself; native smoothing would fight it. */
@@ -1033,8 +1042,8 @@ main > section:nth-of-type(even) {
 
 /* ==========================================================================
    Data sphere (three/DataSphere.jsx), in About
-   A static gradient holds the space until the WebGL canvas has drawn its
-   first frame, then the two cross-fade.
+   The space is held, empty, until the WebGL canvas has drawn its first
+   frame; then the sphere fades in, growing slightly into place.
    ========================================================================== */
 .sphere {
   position: relative;
@@ -1042,30 +1051,17 @@ main > section:nth-of-type(even) {
   pointer-events: none;
 }
 
-.sphere__placeholder {
-  position: absolute;
-  inset: 10% 18%;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 42% 38%,
-    rgba(var(--spot), 0.14),
-    var(--accent-2-soft) 45%,
-    transparent 70%
-  );
-  transition: opacity var(--dur-slow) ease;
-}
-
 .sphere__canvas {
   opacity: 0;
-  transition: opacity var(--dur-slow) ease;
-}
-
-.sphere.is-ready .sphere__placeholder {
-  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity 0.6s var(--ease-out),
+    transform 0.6s var(--ease-out);
 }
 
 .sphere.is-ready .sphere__canvas {
   opacity: 1;
+  transform: none;
 }
 
 /* ==========================================================================

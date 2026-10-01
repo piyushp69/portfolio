@@ -43,10 +43,10 @@ export default defineConfig(({ mode }) => ({
     // Keep fonts as files even when tiny: inlined into the CSS they would
     // delay first paint, and only the subsets a page needs get downloaded.
     assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
-    // three.js (~710 kB) and React Three Fiber load lazily with the About
-    // section's 3D sphere as the section comes into view, never on first
-    // paint. The warning is for chunks on the critical path.
-    chunkSizeWarningLimit: 750,
+    // The About section's 3D sphere (the parts of three.js it uses, ~500 kB)
+    // is a lazy chunk, fetched after first paint, never on the critical
+    // path. The warning is for chunks that are.
+    chunkSizeWarningLimit: 600,
     rolldownOptions: {
       // Debug logging is dropped from production builds; warnings and errors
       // stay, so real problems still show in the console.
@@ -54,16 +54,12 @@ export default defineConfig(({ mode }) => ({
       output: {
         // Libraries in their own chunks, so a content or style change doesn't
         // make returning visitors download them again. React and Motion load
-        // with the page; three.js and React Three Fiber only with the sphere.
+        // with the page; three.js only with the sphere.
         codeSplitting: {
           groups: [
             { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
             { name: 'motion', test: /node_modules[\\/](motion|motion-dom|motion-utils|framer-motion)[\\/]/ },
             { name: 'three', test: /node_modules[\\/]three[\\/]/ },
-            {
-              name: 'react-three',
-              test: /node_modules[\\/](@react-three|zustand|its-fine|react-use-measure|suspend-react|use-sync-external-store)[\\/]/,
-            },
           ],
         },
       },

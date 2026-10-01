@@ -1,0 +1,8 @@
+# Files in /assets carry a content hash in their names (a new build gives
+# changed files new names), so browsers can keep them for a year without
+# checking back. Everything else (index.html, the resume, robots.txt) keeps
+# Netlify's default, always-revalidated caching.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

@@ -37,10 +37,10 @@ export const VIEWPORT = { once: true, amount: 0.2 }
 
 export const popText = {
   hidden: { transition: { staggerChildren: 0.012, staggerDirection: -1 } },
-  visible: { transition: { staggerChildren: 0.03, delayChildren: 0.05 } },
+  visible: { transition: { staggerChildren: 0.02, delayChildren: 0.05 } },
 }
 
-// The pops spring in with a little bounce, but the blur takes a critically
+// Cards spring in with a little bounce, but the blur takes a critically
 // damped spring of the same stiffness: an overshoot would ask for a negative
 // blur, which browsers reject (and log a warning for).
 const unblur = (stiffness, delay = 0) => ({
@@ -50,12 +50,14 @@ const unblur = (stiffness, delay = 0) => ({
   delay,
 })
 
+// Words ease in (no spring): a springy word overshot past full size and
+// overlapped its neighbours mid-animation.
 export const popWord = {
   hidden: {
     opacity: 0,
-    y: 14,
-    scale: 0.6,
-    filter: 'blur(6px)',
+    y: 10,
+    scale: 0.85,
+    filter: 'blur(4px)',
     transition: { duration: 0.22, ease: 'easeIn' },
   },
   visible: {
@@ -63,7 +65,7 @@ export const popWord = {
     y: 0,
     scale: 1,
     filter: 'blur(0px)',
-    transition: { type: 'spring', stiffness: 420, damping: 22, filter: unblur(420) },
+    transition: { duration: 0.35, ease: EASE },
     // Once sharp, drop the filter: a zero blur still costs a layer per word.
     transitionEnd: { filter: 'none' },
   },
